@@ -2,16 +2,21 @@
 function Scope() {
     this.$$watchers = [];
     this.$$lastDirtyWatch = null;
+    this.$$asyncQueue = [];
+    this.$$phase = null;
+    this.$$applyAsyncQueue = [];
 }
 
 function initWatchVal () {}
 function noop () {}
 
-Scope.prototype.$watch = function (watchFn, listenerFn) {
+Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
+    this.$$lastDirtyWatch = null;
     var watcher = {
         watchFn: watchFn,
         listenerFn: listenerFn || noop,
-        last: initWatchVal
+        last: initWatchVal,
+        valueEq: !!valueEq
     };
     this.$$watchers.push(watcher);
 };
@@ -19,13 +24,19 @@ Scope.prototype.$watch = function (watchFn, listenerFn) {
 Scope.prototype.$digest = function () {
     var dirty;
     var ttl = 10;
+    this.$beginPhase('$digest');
     this.$$lastDirtyWatch = null;
     do {
-        dirty = this.$digestOnce();
-        if (dirty && !(ttl--)) {
-            throw Error('可能存在循环改变scope');
+        while(this.$$asyncQueue.length) {
+            var asyncTask = this.$$asyncQueue.shift();
+            asyncTask(this);
         }
-    } while(dirty);
+        dirty = this.$digestOnce();
+        if ((dirty || this.$$asyncQueue.length)&& !(ttl--)) {
+            throw Error('digest 10 次了');
+        }
+    } while(dirty || this.$$asyncQueue.length);
+    this.$clearPhase('$apply');
 };
 
 Scope.prototype.$digestOnce = function () {
@@ -34,14 +45,74 @@ Scope.prototype.$digestOnce = function () {
     _.forEach(this.$$watchers, function (watcher) {
         var newValue = watcher.watchFn(self);
         var oldValue = watcher.last;
-        if (newValue !== oldValue) {
+        if (!self.$$areEqual( newValue, oldValue, watcher.valueEq)) {
             self.$$lastDirtyWatch = watcher;
             dirty = true;
+            watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
             watcher.listenerFn(newValue, (oldValue === initWatchVal ? newValue : oldValue), self);
-            watcher.last = newValue;
-        } else if (self.$$lastDirtyWatch === watcher) {
+        } else if (self.$$lastDirtyWatch === watcher) { // 赞！循环一次都没脏数据，提前结束循环。
             return false;
         }
     });
     return dirty;
 }
+
+Scope.prototype.$eval = function (fn, args) {
+    return fn(this, args);
+};
+Scope.prototype.$apply = function (fn) {
+    try {
+        this.$beginPhase('$apply');
+        this.$eval(fn);
+    } finally {
+        this.$clearPhase('$apply');
+        this.$digest();
+    }
+};
+
+Scope.prototype.$evalAsync = function (fn) { // 感觉很没用的说
+    var self = this;
+    if (!this.$$phase && !this.$$asyncQueue.length) {
+        setTimeout(function () {
+            if (self.$$asyncQueue.length) {
+                self.$digest();
+            }
+        }, 0);
+    }
+    this.$$asyncQueue.push(fn);
+};
+
+Scope.prototype.$beginPhase = function (phase) {
+    if (this.$$phase) {
+        throw Error('already exist phase!!!');
+    }
+    this.$$phase = phase;
+};
+Scope.prototype.$clearPhase = function () {
+    this.$$phase = null;
+}
+
+Scope.prototype.$applyAsync = function (expr) {
+
+    var self = this;
+    self.$$applyAsyncQueue.push(function () {
+        self.$eval(expr);
+    });
+    setTimeout(function() {
+        self.$apply(function() {
+            while (self.$$applyAsyncQueue.length) {
+                self.$$applyAsyncQueue.shift()();
+            }
+        });
+    }, 0);
+};
+Scope.prototype.$$areEqual = function (newValue, oldValue, valueEq) {
+    if (Number.isNaN(newValue) && Number.isNaN(oldValue)) {
+        return true;
+    }
+    if (valueEq) {
+        return _.isEqual(newValue, oldValue);
+    } else {
+        return newValue === oldValue;
+    }
+};
