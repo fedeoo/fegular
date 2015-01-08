@@ -1,0 +1,17 @@
+{
+    "name": "fegular",
+    "title": "自己的angular",
+    "description": "自己动手写angularJS",
+    "version": "1.0.0",
+    "homepage": "",
+    "author": {
+        "name": "fedeoo",
+        "email": "tragedymi[at]163.com"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "grunt": "~0.4.0",
+        "grunt-contrib-jshint": "~0.10.0",
+        "grunt-contrib-testem": "^0.5.16"
+    }
+}

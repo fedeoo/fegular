@@ -1,0 +1,9 @@
+{
+    "framework": "jasmine2",
+    "src_files": [
+        "bower_components/lodash/dist/lodash.js",
+        "bower_components/jquery/dist/jquery.js",
+        "src/*.js",
+        "test/*.js"
+    ]
+}
