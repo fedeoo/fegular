@@ -5,6 +5,7 @@ function Scope() {
     this.$$asyncQueue = [];
     this.$$phase = null;
     this.$$applyAsyncQueue = [];
+    this.$$postDigestQueue = [];
 }
 
 function initWatchVal () {}
@@ -37,6 +38,11 @@ Scope.prototype.$digest = function () {
         }
     } while(dirty || this.$$asyncQueue.length);
     this.$clearPhase('$apply');
+
+    while(this.$$postDigestQueue.length) {
+        var fn = this.$$postDigestQueue.shift();
+        fn(self);
+    }
 };
 
 Scope.prototype.$digestOnce = function () {
@@ -115,4 +121,8 @@ Scope.prototype.$$areEqual = function (newValue, oldValue, valueEq) {
     } else {
         return newValue === oldValue;
     }
+};
+
+Scope.prototype.$$postDigest = function (fn) {
+    this.$$postDigestQueue.push(fn);
 };
