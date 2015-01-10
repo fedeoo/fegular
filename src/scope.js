@@ -138,3 +138,56 @@ Scope.prototype.$$areEqual = function (newValue, oldValue, valueEq) {
 Scope.prototype.$$postDigest = function (fn) {
     this.$$postDigestQueue.push(fn);
 };
+
+Scope.prototype.$watchGroup = function (watchFns, listenerFn) {
+    var self = this;
+    var changeReactionScheduled = false;
+    var newValues = new Array(watchFns.length), oldValues = new Array(watchFns.length);
+    var fisrtRun = true;
+    if (watchFns.length === 0) {
+        // var fn = function () {
+        //     listenerFn(newValues, oldValues, self);
+        // }
+        // self.$evalAsync(fn);
+        // return function () {
+        //     var index = self.$$asyncQueue.indexOf(fn);
+        //     self.$$asyncQueue.splice(index, 1);
+        // };
+        var shouldcall = true;
+        self.$evalAsync(function () {
+            if (shouldcall) {
+                listenerFn(newValues, oldValues, self);
+            }
+        });
+        return function () {
+            shouldcall = false;
+        };
+    }
+    var destroyFns = _.map(watchFns, function (watchFn, index) {
+        return self.$watch(watchFn, function (newValue, oldValue) {
+            newValues[index] = newValue;
+            oldValues[index] = oldValue;
+            if (!changeReactionScheduled) {
+                changeReactionScheduled = true;
+                self.$evalAsync(function () {
+                    if (fisrtRun) {
+                        fisrtRun = false;
+                        listenerFn(newValues, newValues, self);
+                    } else {
+                        listenerFn(newValues, oldValues, self);
+                    }
+                    changeReactionScheduled = false;
+                });
+            }
+        });
+    });
+    return function () {
+        // _.forEach(watchFns, function (watchFn, i) {
+        //     var index = self.$$watchers.indexOf(watchFn);
+        //     self.$$watchers.splice(index, 1);
+        // });
+        _.forEach(destroyFns, function (destroyFn) {
+            destroyFn();
+        });
+    };
+};
