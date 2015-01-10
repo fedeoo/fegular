@@ -1,4 +1,5 @@
 'use strict';
+var $$lastDirtyWatch = null;
 function Scope() {
     this.$$watchers = [];
     this.$$lastDirtyWatch = null;
@@ -6,13 +7,15 @@ function Scope() {
     this.$$phase = null;
     this.$$applyAsyncQueue = [];
     this.$$postDigestQueue = [];
+    this.$$children = [];
+    this.$root = this;
 }
 
 function initWatchVal () {}
 function noop () {}
 
 Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
-    this.$$lastDirtyWatch = null;
+    this.$root.$$lastDirtyWatch = null;
     var self = this;
     var watcher = {
         watchFn: watchFn,
@@ -21,11 +24,13 @@ Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
         valueEq: !!valueEq
     };
     this.$$watchers.unshift(watcher);
+    self.$root.$$lastDirtyWatch = null;
+
     return function () {
         var index = self.$$watchers.indexOf(watcher);
         if (index >= 0) {
             self.$$watchers.splice(index, 1);
-            self.$$lastDirtyWatch = null;
+            self.$root.$$lastDirtyWatch = null;
         }
     };
 };
@@ -34,7 +39,7 @@ Scope.prototype.$digest = function () {
     var dirty;
     var ttl = 10;
     this.$beginPhase('$digest');
-    this.$$lastDirtyWatch = null;
+    this.$root.$$lastDirtyWatch = null;
     do {
         while(this.$$asyncQueue.length) {
             var asyncTask = this.$$asyncQueue.shift();
@@ -56,24 +61,29 @@ Scope.prototype.$digest = function () {
 Scope.prototype.$digestOnce = function () {
     var dirty = false;
     var self = this;
-    _.forEachRight(this.$$watchers, function (watcher) {
-        try {
-            var newValue = watcher.watchFn(self);
-            var oldValue = watcher.last;
-            if (!self.$$areEqual( newValue, oldValue, watcher.valueEq)) {
-                self.$$lastDirtyWatch = watcher;
-                dirty = true;
-                watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
-                watcher.listenerFn(newValue, (oldValue === initWatchVal ? newValue : oldValue), self);
-            } else if (self.$$lastDirtyWatch === watcher) { // 赞！循环一次都没脏数据，提前结束循环。
-                return false;
+    var continueLoop = true;
+    this.$$everyScope(function (scope) {
+        _.forEachRight(scope.$$watchers, function (watcher) {
+            try {
+                var newValue = watcher.watchFn(scope);
+                var oldValue = watcher.last;
+                if (!scope.$$areEqual( newValue, oldValue, watcher.valueEq)) {
+                    self.$root.$$lastDirtyWatch = watcher;
+                    dirty = true;
+                    watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+                    watcher.listenerFn(newValue, (oldValue === initWatchVal ? newValue : oldValue), scope);
+                } else if (self.$root.$$lastDirtyWatch === watcher) { // 赞！循环一次都没脏数据，提前结束循环。
+                    return false;
+                }
+            } catch (e) {
+                continueLoop = false;
+                console.log(e);
             }
-        } catch (e) {
-            console.log(e);
-        }
+        });
+        return continueLoop;
     });
     return dirty;
-}
+};
 
 Scope.prototype.$eval = function (fn, args) {
     return fn(this, args);
@@ -85,7 +95,11 @@ Scope.prototype.$apply = function (fn) {
     } finally {
         this.$clearPhase('$apply');
         this.$digest();
+        this.$root.$digest();
     }
+    // if (this.$root !== this) {
+    //     this.$root.$apply(fn);
+    // }
 };
 
 Scope.prototype.$evalAsync = function (fn) { // 感觉很没用的说
@@ -93,7 +107,7 @@ Scope.prototype.$evalAsync = function (fn) { // 感觉很没用的说
     if (!this.$$phase && !this.$$asyncQueue.length) {
         setTimeout(function () {
             if (self.$$asyncQueue.length) {
-                self.$digest();
+                self.$root.$digest();
             }
         }, 0);
     }
@@ -108,7 +122,7 @@ Scope.prototype.$beginPhase = function (phase) {
 };
 Scope.prototype.$clearPhase = function () {
     this.$$phase = null;
-}
+};
 
 Scope.prototype.$applyAsync = function (expr) {
 

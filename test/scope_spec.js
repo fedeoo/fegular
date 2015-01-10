@@ -1,6 +1,6 @@
 'use strict';
 
-describe('scope test', function () {
+xdescribe('scope test', function () {
     it('普通对象', function () {
         var scope = new Scope();
         scope.aProp = 1;

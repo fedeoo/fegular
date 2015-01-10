@@ -3,7 +3,8 @@
     "src_files": [
         "bower_components/lodash/dist/lodash.js",
         "bower_components/jquery/dist/jquery.js",
-        "src/*.js",
+        "src/scope.js",
+        "src/scope_with_inheritance.js",
         "test/*.js"
     ]
 }
