@@ -13,13 +13,21 @@ function noop () {}
 
 Scope.prototype.$watch = function (watchFn, listenerFn, valueEq) {
     this.$$lastDirtyWatch = null;
+    var self = this;
     var watcher = {
         watchFn: watchFn,
         listenerFn: listenerFn || noop,
         last: initWatchVal,
         valueEq: !!valueEq
     };
-    this.$$watchers.push(watcher);
+    this.$$watchers.unshift(watcher);
+    return function () {
+        var index = self.$$watchers.indexOf(watcher);
+        if (index >= 0) {
+            self.$$watchers.splice(index, 1);
+            self.$$lastDirtyWatch = null;
+        }
+    };
 };
 
 Scope.prototype.$digest = function () {
@@ -48,16 +56,20 @@ Scope.prototype.$digest = function () {
 Scope.prototype.$digestOnce = function () {
     var dirty = false;
     var self = this;
-    _.forEach(this.$$watchers, function (watcher) {
-        var newValue = watcher.watchFn(self);
-        var oldValue = watcher.last;
-        if (!self.$$areEqual( newValue, oldValue, watcher.valueEq)) {
-            self.$$lastDirtyWatch = watcher;
-            dirty = true;
-            watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
-            watcher.listenerFn(newValue, (oldValue === initWatchVal ? newValue : oldValue), self);
-        } else if (self.$$lastDirtyWatch === watcher) { // 赞！循环一次都没脏数据，提前结束循环。
-            return false;
+    _.forEachRight(this.$$watchers, function (watcher) {
+        try {
+            var newValue = watcher.watchFn(self);
+            var oldValue = watcher.last;
+            if (!self.$$areEqual( newValue, oldValue, watcher.valueEq)) {
+                self.$$lastDirtyWatch = watcher;
+                dirty = true;
+                watcher.last = (watcher.valueEq ? _.cloneDeep(newValue) : newValue);
+                watcher.listenerFn(newValue, (oldValue === initWatchVal ? newValue : oldValue), self);
+            } else if (self.$$lastDirtyWatch === watcher) { // 赞！循环一次都没脏数据，提前结束循环。
+                return false;
+            }
+        } catch (e) {
+            console.log(e);
         }
     });
     return dirty;
