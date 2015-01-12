@@ -19,6 +19,7 @@ Scope.prototype.$new = function (isolated, parent) {
     }
     scope.$$watchers = [];
     scope.$$children = [];
+    scope.$$listeners = {};
     scope.$parent = parent;
     parent.$$children.push(scope);
     return scope;
