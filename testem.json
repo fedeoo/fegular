@@ -5,6 +5,8 @@
         "bower_components/jquery/dist/jquery.js",
         "src/scope.js",
         "src/scope_with_inheritance.js",
+        "src/scope_watchcollection.js",
+        "src/scope_event.js",
         "test/*.js"
     ]
 }

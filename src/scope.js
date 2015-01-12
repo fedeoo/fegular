@@ -8,7 +8,9 @@ function Scope() {
     this.$$applyAsyncQueue = [];
     this.$$postDigestQueue = [];
     this.$$children = [];
+    this.$$applyAsyncId = null;
     this.$root = this;
+    this.$$listeners = {};
 }
 
 function initWatchVal () {}
@@ -40,10 +42,14 @@ Scope.prototype.$digest = function () {
     var ttl = 10;
     this.$beginPhase('$digest');
     this.$root.$$lastDirtyWatch = null;
+    if (this.$$applyAsyncId) { 
+        clearTimeout(this.$root.$$applyAsyncId); 
+        this.$$flushApplyAsync();
+    }
     do {
         while(this.$$asyncQueue.length) {
             var asyncTask = this.$$asyncQueue.shift();
-            asyncTask(this);
+            asyncTask.scope.$eval(asyncTask.expression);
         }
         dirty = this.$digestOnce();
         if ((dirty || this.$$asyncQueue.length)&& !(ttl--)) {
@@ -85,13 +91,13 @@ Scope.prototype.$digestOnce = function () {
     return dirty;
 };
 
-Scope.prototype.$eval = function (fn, args) {
-    return fn(this, args);
+Scope.prototype.$eval = function (fn, locals) {
+    return fn(this, locals);
 };
 Scope.prototype.$apply = function (fn) {
     try {
         this.$beginPhase('$apply');
-        this.$eval(fn);
+        this.$eval(fn, this);
     } finally {
         this.$clearPhase('$apply');
         this.$digest();
@@ -111,7 +117,7 @@ Scope.prototype.$evalAsync = function (fn) { // 感觉很没用的说
             }
         }, 0);
     }
-    this.$$asyncQueue.push(fn);
+    this.$$asyncQueue.push({scope: this, expression: fn});
 };
 
 Scope.prototype.$beginPhase = function (phase) {
@@ -124,19 +130,42 @@ Scope.prototype.$clearPhase = function () {
     this.$$phase = null;
 };
 
-Scope.prototype.$applyAsync = function (expr) {
+// Scope.prototype.$applyAsync = function (expr) {
 
+//     var self = this;
+//     self.$$applyAsyncQueue.push(function () {
+//         self.$eval(expr);
+//     });
+//     setTimeout(function() {
+//         self.$apply(function() {
+//             while (self.$$applyAsyncQueue.length) {
+//                 self.$$applyAsyncQueue.shift()();
+//             }
+//         });
+//     }, 0);
+// };
+
+Scope.prototype.$applyAsync = function(expr) {
     var self = this;
-    self.$$applyAsyncQueue.push(function () {
-        self.$eval(expr);
+    self.$$applyAsyncQueue.push(function() {
+        self.$eval(expr, self);
     });
-    setTimeout(function() {
-        self.$apply(function() {
-            while (self.$$applyAsyncQueue.length) {
-                self.$$applyAsyncQueue.shift()();
-            }
-        });
-    }, 0);
+    if (self.$root.$$applyAsyncId === null) {
+        self.$root.$$applyAsyncId = setTimeout(function() {
+            self.$apply(_.bind(self.$$flushApplyAsync, self));
+        }, 0);
+    }
+};
+
+Scope.prototype.$$flushApplyAsync = function() {
+    while (this.$$applyAsyncQueue.length) {
+        try {
+            this.$$applyAsyncQueue.shift()();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    this.$root.$$applyAsyncId = null;
 };
 Scope.prototype.$$areEqual = function (newValue, oldValue, valueEq) {
     if (Number.isNaN(newValue) && Number.isNaN(oldValue)) {

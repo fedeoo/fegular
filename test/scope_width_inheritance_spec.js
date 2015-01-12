@@ -1,5 +1,5 @@
 'use strict';
-describe('scope inheritance', function() {
+xdescribe('scope inheritance', function() {
     var parent;
     beforeEach(function() {
         parent = new Scope();
@@ -371,6 +371,5 @@ describe('scope inheritance', function() {
         parent.$digest();
         expect(child.counter).toBe(2);
     });
-
 
 });
